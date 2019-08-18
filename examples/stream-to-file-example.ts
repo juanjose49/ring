@@ -28,9 +28,24 @@ async function example() {
   // Create the fully qualified filename without the extension, as it is appended automatically.
   console.log('Starting to record live video to file...')
   const pathToVideo = path.format(parsedDirname)
+  let retries = 0;
+  let recordingSucceeded = false;
+  while(retries < 10 && !recordingSucceeded){
+    try{
   await camera.recordLiveVideoToFile(pathToVideo, 10)
+      recordingSucceeded = true;
   console.log('Completed recording.')
   console.log('Your video can be found here: ' + pathToVideo + '.mp4')
+    }catch(e){
+      console.log("Caught exception: " + e.message)
+      retries++;
+      if(retries === 10){
+        console.log("Failed to record video. Try again later.")
+      }
+    }
+
+  }
+  
   process.exit()
 }
 

@@ -370,13 +370,49 @@ export class RingCamera {
         'A fully qualified filename must be provided in order to record a video.'
       )
     }
-    const sipSession = await this.createSipSession(),
-      h264builder = new H264Builder(filename + '.h264')
+    fs.existsSync(filename + '.h264') && fs.unlinkSync(filename + '.h264')
+    fs.existsSync(filename + '.mp4') && fs.unlinkSync(filename + '.mp4')
+
+    const getSipSession = () : Promise<SipSession> =>{
+      return new Promise((resolve, reject) =>{
+          this.createSipSession().then(resolve, reject);
+          setTimeout(()=>{
+              reject('Promise timed out after ' + 500 + ' ms');
+          }, 500);
+      });
+    }
+    let timeouts = 0;
+    let sipSession;
+    while(timeouts < 5 && !sipSession){
+      try{
+        sipSession = await getSipSession();
+      }catch(e){
+        console.log(e);
+        console.log("Incrementing timeout counter and retrying.")
+        timeouts++;
+      }
+    }
+    if(!sipSession){
+      throw new Error("SIP Session was not created. Exiting.")
+    }
+
+    const h264builder = new H264Builder(filename + '.h264');
+    let packetReceived = false
     sipSession.videoStream.onRtpPacket.subscribe(rtpPacket => {
+      packetReceived = true;
       h264builder.packetReceived(rtpPacket.message)
     })
     await sipSession.start()
-    await delay(duration * 1000)
+    await delay(500);
+    if(!packetReceived){
+      sipSession.stop();
+      h264builder.end();
+      fs.unlinkSync(filename + '.h264');
+      throw new Error("Packets were not recieved")
+    }else{
+      await delay((duration * 1000)-500)
+    }
+    
     sipSession.stop()
     h264builder.end()
     await exec(
